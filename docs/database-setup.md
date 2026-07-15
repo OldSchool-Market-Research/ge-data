@@ -50,6 +50,41 @@ Write semantics:
 
 Prices store `item_id` only; join `items` when you want names.
 
+## item_relations (`init/02_item_relations.sql` + `03_item_relations_seed.sql`)
+
+A small hand-curated table of mechanical conversions between tradeable items —
+potion decants (4↔3 dose), GE-clerk armour sets, and combine recipes. It backs
+the conversion-arbitrage tooling in ge-mcp (`list_relations` / `combo_quote`):
+these are the only places where two GE prices are mechanically linked, so
+sum-of-parts gaps are direction-neutral edges.
+
+It is **not ingested at runtime**. Curation happens by hand: item IDs come from
+the OSRS Wiki `/mapping` feed (the same source as `items`), and the seed is
+re-runnable (`ON CONFLICT (name) DO UPDATE`). Skill/quest gates and NPC fees
+live in `notes`; leg names and buy limits are joined from `items` at query time
+so they cannot drift.
+
+**Apply to prod** (manual, on eldo, **as the `ge-data` role** — the
+default-privilege rules in the ge-mcp / ge-orchestrator grants files attach
+SELECT automatically only when `ge-data` creates the table):
+
+```bash
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data \
+  -f init/02_item_relations.sql -f init/03_item_relations_seed.sql
+```
+
+**Sanity check after (re)seeding** — every leg must resolve to a real item; any
+row returned here is a curation bug (wrong ID silently prices the wrong item):
+
+```sql
+SELECT r.name, (l->>'item_id')::int AS missing_item_id
+FROM item_relations r,
+     LATERAL jsonb_array_elements(r.inputs || r.outputs) AS l
+WHERE NOT EXISTS (
+  SELECT 1 FROM items i WHERE i.item_id = (l->>'item_id')::int
+);
+```
+
 ## Running the DB locally (nix dev shell)
 
 Local dev runs a real Postgres from the nix shell — no container. `default.nix`
