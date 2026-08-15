@@ -101,9 +101,12 @@ INSERT INTO item_relations (kind, name, reversible, inputs, outputs, notes) VALU
 ('set', 'Dagon''hai robes set',       true, '[{"item_id":24288,"qty":1},{"item_id":24291,"qty":1},{"item_id":24294,"qty":1}]', '[{"item_id":24333,"qty":1}]', 'GE clerk, free, both directions.'),
 ('set', 'Obsidian armour set',        true, '[{"item_id":21298,"qty":1},{"item_id":21301,"qty":1},{"item_id":21304,"qty":1}]', '[{"item_id":21279,"qty":1}]', 'GE clerk, free, both directions.'),
 ('set', 'Sunfire fanatic armour set', true, '[{"item_id":28933,"qty":1},{"item_id":28936,"qty":1},{"item_id":28939,"qty":1}]', '[{"item_id":29424,"qty":1}]', 'GE clerk, free, both directions.'),
-('set', 'Blood moon armour set',      true, '[{"item_id":29028,"qty":1},{"item_id":29022,"qty":1},{"item_id":29025,"qty":1}]', '[{"item_id":31136,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets.'),
-('set', 'Blue moon armour set',       true, '[{"item_id":29019,"qty":1},{"item_id":29013,"qty":1},{"item_id":29016,"qty":1}]', '[{"item_id":31139,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets.'),
-('set', 'Eclipse moon armour set',    true, '[{"item_id":29010,"qty":1},{"item_id":29004,"qty":1},{"item_id":29007,"qty":1}]', '[{"item_id":31142,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets.'),
+-- Moon sets are FOUR components: the set item includes the weapon (wiki:
+-- "all four components"). Omitting it booked the weapon's value as phantom
+-- conversion profit (strategies 1291/1293, ~218M, 2026-08-14).
+('set', 'Blood moon armour set',      true, '[{"item_id":29028,"qty":1},{"item_id":29022,"qty":1},{"item_id":29025,"qty":1},{"item_id":28997,"qty":1}]', '[{"item_id":31136,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets, dual macuahuitl.'),
+('set', 'Blue moon armour set',       true, '[{"item_id":29019,"qty":1},{"item_id":29013,"qty":1},{"item_id":29016,"qty":1},{"item_id":28988,"qty":1}]', '[{"item_id":31139,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets, blue moon spear.'),
+('set', 'Eclipse moon armour set',    true, '[{"item_id":29010,"qty":1},{"item_id":29004,"qty":1},{"item_id":29007,"qty":1},{"item_id":29000,"qty":1}]', '[{"item_id":31142,"qty":1}]', 'GE clerk, free, both directions. Helm, chestplate, tassets, eclipse atlatl.'),
 ('set', 'Torva armour set',           true, '[{"item_id":26382,"qty":1},{"item_id":26384,"qty":1},{"item_id":26386,"qty":1}]', '[{"item_id":31145,"qty":1}]', 'GE clerk, free, both directions. Restored (tradeable) pieces.'),
 ('set', 'Virtus armour set',          true, '[{"item_id":26241,"qty":1},{"item_id":26243,"qty":1},{"item_id":26245,"qty":1}]', '[{"item_id":31148,"qty":1}]', 'GE clerk, free, both directions.'),
 ('set', 'Oathplate armour set',       true, '[{"item_id":30750,"qty":1},{"item_id":30753,"qty":1},{"item_id":30756,"qty":1}]', '[{"item_id":30744,"qty":1}]', 'GE clerk, free, both directions.'),
