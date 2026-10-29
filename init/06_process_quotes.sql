@@ -32,6 +32,10 @@
 -- Prod apply (after 04+05, as the ge-data role; re-runnable):
 --   psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -f init/06_process_quotes.sql
 
+-- One transaction: readers (the hh:05 snapshot, the API, ge-mcp) never see
+-- the gap between the DROP and the CREATE below.
+BEGIN;
+
 -- Dropped and recreated (not just CREATE OR REPLACE) so a column change stays
 -- re-runnable; nothing depends on these views, and ge-data's default privileges
 -- re-grant SELECT to ge-mcp / ge-orchestrator when it recreates them.
@@ -100,7 +104,7 @@ WITH agg AS (
          min(CASE l.side WHEN 'buy' THEN l.high_vol_24h ELSE l.low_vol_24h END / NULLIF(l.qty, 0)) / 24 AS market_actions_per_hour_insta,
          max(extract(epoch FROM now() - CASE l.side WHEN 'buy' THEN l.low_time ELSE l.high_time END))::bigint AS max_leg_age_s,
          -- display only: the recipe's main output (largest sell qty), /mapping icon file
-         (array_agg(l.icon ORDER BY l.qty DESC NULLS LAST, l.item_id) FILTER (WHERE l.side = 'sell'))[1] AS icon
+         (array_agg(l.icon ORDER BY l.qty DESC NULLS LAST, l.item_id) FILTER (WHERE l.side = 'sell' AND l.icon IS NOT NULL))[1] AS icon
   FROM process_legs_now l
   GROUP BY l.recipe_id
 ),
@@ -169,3 +173,5 @@ CREATE TABLE IF NOT EXISTS process_snapshots (
 );
 SELECT create_hypertable('process_snapshots', by_range('ts', INTERVAL '1 month'), if_not_exists => true);
 CREATE INDEX IF NOT EXISTS process_snapshots_recipe_ts_idx ON process_snapshots (recipe_id, ts DESC);
+
+COMMIT;
