@@ -1,4 +1,4 @@
-// Package store wraps pgxpool and exposes the three write paths the ingester
+// Package store wraps pgxpool and exposes the write paths the ingester
 // needs. The shape mirrors init/01_schema.sql: nullable prices stay nullable,
 // the PK is (ts, item_id) for both price tables, and item_id is the only
 // column the price tables share with `items`. There is NO FK from price to
@@ -20,8 +20,8 @@ type Store struct {
 }
 
 // New dials the pool with a small default config. The pool's default
-// MaxConns (4) is fine for one ingester instance — three loops, each
-// flushing once a minute or once every five minutes.
+// MaxConns (4) is fine for one ingester instance — four loops, flushing
+// between twice a minute (/latest) and once a day (/mapping).
 func New(ctx context.Context, url string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -184,4 +184,35 @@ func (s *Store) InsertPrices1m(ctx context.Context, ts any, rows []Prices1mRow) 
 		}
 	}
 	return br.Close()
+}
+
+// ---------------------------------------------------------------------------
+// SnapshotProcessQuotes
+//   - One INSERT ... SELECT from the process_quotes_now view (init/06), which
+//     owns every margin and rate; this just stamps the hour on it.
+//   - ts = the current hour, so a second run in the same hour (restart, slow
+//     tick) hits the PK and DO NOTHING keeps the first snapshot.
+//   - Returns rows inserted: 0 means this hour was already taken.
+// ---------------------------------------------------------------------------
+
+const snapshotProcessQuotesSQL = `
+INSERT INTO process_snapshots (
+  ts, recipe_id, name, margin_slow, margin_insta, gp_hr_theoretical, gp_hr, gp_hr_insta,
+  effective_actions_per_hour, effective_actions_per_hour_insta, limit_actions_per_hour,
+  market_actions_per_hour, market_actions_per_hour_insta,
+  missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s)
+SELECT date_trunc('hour', now()), recipe_id, name, margin_slow, margin_insta, gp_hr_theoretical,
+       gp_hr, gp_hr_insta, effective_actions_per_hour, effective_actions_per_hour_insta,
+       limit_actions_per_hour, market_actions_per_hour, market_actions_per_hour_insta,
+       missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s
+FROM process_quotes_now
+ON CONFLICT (ts, recipe_id) DO NOTHING
+`
+
+func (s *Store) SnapshotProcessQuotes(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, snapshotProcessQuotesSQL)
+	if err != nil {
+		return 0, fmt.Errorf("snapshot process quotes: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }

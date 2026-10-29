@@ -1,7 +1,8 @@
 // Command ingester is the ge-data collection process. One instance only:
-// it runs three independent loops (mapping refresh, /5m poll, /1m poll)
+// it runs three independent poll loops (mapping refresh, /5m poll, /1m poll)
 // against the OSRS Wiki real-time prices API and writes the results to the
-// TimescaleDB described in docs/database-setup.md.
+// TimescaleDB described in docs/database-setup.md, plus an hourly loop that
+// snapshots the processing-recipe quotes (no Wiki call).
 //
 // Process model:
 //   - One *wiki.Client, one *store.Store, one Deps shared across the loops.
@@ -59,15 +60,17 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() { defer wg.Done(); collect.MappingLoop(ctx, deps) }()
 	go func() { defer wg.Done(); collect.Prices5mLoop(ctx, deps) }()
 	go func() { defer wg.Done(); collect.Prices1mLoop(ctx, deps) }()
+	go func() { defer wg.Done(); collect.ProcessSnapshotLoop(ctx, deps) }()
 
 	slog.Info("ingester started",
 		"mapping_interval", cfg.MappingInterval,
 		"poll_5m_interval", cfg.Poll5mInterval,
 		"poll_1m_interval", cfg.Poll1mInterval,
+		"snapshot_interval", cfg.SnapshotInterval,
 	)
 
 	wg.Wait()
