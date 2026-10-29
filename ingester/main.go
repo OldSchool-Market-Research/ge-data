@@ -59,15 +59,17 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() { defer wg.Done(); collect.MappingLoop(ctx, deps) }()
 	go func() { defer wg.Done(); collect.Prices5mLoop(ctx, deps) }()
 	go func() { defer wg.Done(); collect.Prices1mLoop(ctx, deps) }()
+	go func() { defer wg.Done(); collect.ProcessSnapshotLoop(ctx, deps) }()
 
 	slog.Info("ingester started",
 		"mapping_interval", cfg.MappingInterval,
 		"poll_5m_interval", cfg.Poll5mInterval,
 		"poll_1m_interval", cfg.Poll1mInterval,
+		"snapshot_interval", cfg.SnapshotInterval,
 	)
 
 	wg.Wait()

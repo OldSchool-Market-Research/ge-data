@@ -1,5 +1,5 @@
-// Package collect wires the wiki.Client to the store.Store on three
-// independent loops. Each loop is a `tick` over a fixed interval: the wiki
+// Package collect wires the wiki.Client to the store.Store on independent
+// loops (plus one DB-only loop, the hourly process snapshot). Each loop is a `tick` over a fixed interval: the wiki
 // fetch is the body, the store write is the tail, and a single bad fetch is
 // logged and skipped — the loop must keep running across transient errors.
 package collect
@@ -178,6 +178,26 @@ func Prices1mLoop(ctx context.Context, d Deps) {
 			return err
 		}
 		slog.Info("1m tick written", "ts", ts, "candidates", len(latest.Data), "written", len(rows))
+		return nil
+	})
+}
+
+// ---------------------------------------------------------------------------
+// ProcessSnapshotLoop: once an hour, copy every processing recipe's live
+// quote (the process_quotes_now view, init/06) into process_snapshots, keyed
+// by the hour. No Wiki fetch: the view prices recipes from the rows the
+// other loops already wrote, and owns all the math. Until init/04-06 are
+// applied the insert fails; tick logs it and retries next hour, so the
+// ingester can ship before the schema does.
+// ---------------------------------------------------------------------------
+
+func ProcessSnapshotLoop(ctx context.Context, d Deps) {
+	tick(ctx, "process_snapshot", d.Cfg.SnapshotInterval, func(ctx context.Context) error {
+		n, err := d.Store.SnapshotProcessQuotes(ctx)
+		if err != nil {
+			return err
+		}
+		slog.Info("process snapshot written", "rows", n)
 		return nil
 	})
 }

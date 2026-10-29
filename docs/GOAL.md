@@ -23,6 +23,11 @@ Plus one occasional load: `/mapping` → `items`, one typed column per field
 on startup and again every ~24h (`ON CONFLICT (item_id) DO UPDATE`) to pick up
 new items.
 
+Plus one derived write: once an hour the ingester copies the `process_quotes_now`
+view (live gp/hr of every `process_recipes` row, priced from the two polls) into
+`process_snapshots`. No Wiki call; it exists so processing trends have history.
+See `docs/database-setup.md`.
+
 ## Notes
 
 * **Keep the nulls.** A price is null exactly when nothing traded that side

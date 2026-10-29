@@ -120,6 +120,31 @@ WHERE NOT EXISTS (
 );
 ```
 
+## process_quotes (`init/06_process_quotes.sql`)
+
+The single home of the processing math, so ge-mcp, the orchestrator API and
+the ingester can't drift apart:
+
+- `process_legs_now` (view): every recipe leg with its latest `prices_1m` quote
+  and trailing-24h `prices_5m` volume. Linked recipes resolve their legs through
+  `item_relations`.
+- `process_quotes_now` (view): per recipe, slow margin (buy at low, sell at
+  high minus tax) and insta margin (the reverse), the real GE tax (sale/50,
+  5M cap), and gp/hr at an effective rate = LEAST(player actions/hr, buy-limit
+  rate, market-volume rate). A margin is NULL when a leg has no price.
+- `process_snapshots` (hypertable): the ingester's hourly copy of
+  `process_quotes_now`, keyed `(ts = the hour, recipe_id)`. History for trend and
+  top-performer queries.
+
+**Apply to prod** after 04+05, as `ge-data` (re-runnable):
+
+```bash
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -f init/06_process_quotes.sql
+```
+
+Until it's applied, the ingester's hourly snapshot logs an error and retries
+the next hour; the price polls are unaffected.
+
 ## Running the DB locally (nix dev shell)
 
 Local dev runs a real Postgres from the nix shell — no container. `default.nix`

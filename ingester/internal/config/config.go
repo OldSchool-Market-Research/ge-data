@@ -21,9 +21,10 @@ type Config struct {
 	DatabaseURL string
 	UserAgent   string
 
-	MappingInterval time.Duration
-	Poll5mInterval  time.Duration
-	Poll1mInterval  time.Duration
+	MappingInterval  time.Duration
+	Poll5mInterval   time.Duration
+	Poll1mInterval   time.Duration
+	SnapshotInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -44,6 +45,9 @@ func Load() (Config, error) {
 		// since generations are 60s apart there's at most one emit per item
 		// per minute (no PK collision against the minute-truncated ts).
 		Poll1mInterval: 30 * time.Second,
+		// process_snapshots is keyed by the hour, so polling more often than
+		// hourly just re-hits the PK; less often leaves gaps in the history.
+		SnapshotInterval: time.Hour,
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
