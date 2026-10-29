@@ -20,6 +20,7 @@ Usage (no system python on eldo; run from ge-data/):
 mapping.json is the OSRS Wiki /mapping (same source as the `items` table):
     curl -A '<contact>' https://prices.runescape.wiki/api/v1/osrs/mapping -o mapping.json
 """
+import ast
 import json
 import math
 import re
@@ -88,8 +89,11 @@ def rows(a, b):
 # parsing, before linking. Keys are sheet rows; each fix says why in `note`.
 #   in_set / out_set: {item_id: qty} (adds the leg if missing)
 #   replace:          {old_item_id: new_item_id} on either side (must exist)
-TAN = dict(in_set={9075: 2, 554: 5}, note="Tan Leather costs 2 astral + 1 nature + 5 fire per cast (Wiki); the sheet charges 1 astral and no fire.")
-DEGRIME = dict(in_set={561: 2, 557: 4}, note="Degrime costs 2 nature + 4 earth per cast (Wiki); the sheet charges 1 nature and no earth.")
+# Rune convention for every spell here (Plank Make, Superglass Make, Tan
+# Leather, Degrime): elemental runes are assumed to come from a staff, as the
+# sheet does for Plank Make and Superglass; every other rune is a leg.
+TAN = dict(in_set={9075: 2}, note="Tan Leather costs 2 astral + 1 nature per cast (+5 fire, assumed from a staff) (Wiki); the sheet charges 1 astral.")
+DEGRIME = dict(in_set={561: 2}, note="Degrime costs 2 nature per cast (+4 earth, assumed from a staff) (Wiki); the sheet charges 1 nature.")
 CHEM = dict(in_set={21163: 0.015}, note="Amulet of chemistry: 15% proc per potion over 10 charges = 0.015 amulets/action; the sheet omits the /10 here.")
 CLEAN_CADANTINE = dict(replace={215: 265}, note="Zahur makes unfinished potions from clean herbs only (Wiki); the sheet buys grimy cadantine.")
 ZENYTE = dict(in_set={2357: 1, 564: 1}, note="Adds the gold bar and the Lvl-7 Enchant cosmic rune the sheet leaves out.")
@@ -112,8 +116,48 @@ LEG_FIX = {
 # Sheet rows whose "actions/hr" is really a buy limit (e.g. 13000*12, 200*12)
 # or an NPC bulk exchange, not player speed. They're bounded by buy limits
 # and market volume instead.
-VOLUME_BOUND_ROWS = {*rows(76, 90), 299, 300, *rows(36, 43), 172, 216}
+VOLUME_BOUND_ROWS = {*rows(76, 90), *rows(231, 249), 299, 300, *rows(36, 43), 172, 216}
 VOLUME_BOUND_NOTE = "The sheet's actions/hr here came from a buy limit or an NPC bulk exchange, not player speed; bounded by buy limits and market volume instead."
+# Every row-keyed curation entry names the recipe it expects (a regex on the
+# sheet's column B). If the sheet gains or loses a row, the keys would point at
+# the wrong recipes; check_rows() refuses to run instead.
+ROW_NAMES = {
+    **{n: r"Leather$" for n in rows(24, 27)},
+    **{n: r"Sap$" for n in rows(36, 43)},
+    56: r"^Rosewood Plank$",
+    **{n: r" Spell$" for n in rows(60, 74)},
+    **{n: r" Zahur$" for n in rows(76, 90)},
+    99: r"^1 Tick Karambwans$",
+    **{n: r"Battlestaves HA$" for n in (109, 111, 113, 115)},
+    **{n: r"^Unboxing " for n in rows(164, 169)},
+    172: r"^Fish Crate Making$",
+    **{n: r"^(Making )?(Bastion|Battlemage) Potion" for n in rows(200, 203)},
+    216: r"^Crushed Nest$",
+    221: r"^Lava Scale Shard$",
+    **{n: r" unf$" for n in rows(231, 249)},
+    299: r"^Teeth to Dragon Dart Tips$",
+    300: r"^Fang to Dragon Arrowtips$",
+    **{n: r"(Anguish|Torture|Suffering|Tormented)" for n in rows(303, 310)},
+    322: r"^Accursed Sceptre Making$",
+    **{n: r"^Fortify Masori" for n in rows(405, 407)},
+    **{n: r"^Repair Torva" for n in rows(409, 411)},
+    413: r"^Make ZCB$",
+    **{n: r"(Pyre|Logs)$" for n in rows(421, 433)},
+}
+
+
+def check_rows(values):
+    curated = {*LINK, *ACCEPT, *DEFER_ROWS, *RECATEGORY_ROWS, *LEG_FIX, *VOLUME_BOUND_ROWS, *NOTES}
+    missing = sorted(curated - set(ROW_NAMES))
+    if missing:
+        sys.exit(f"curated rows without a ROW_NAMES guard: {missing}")
+    for n in sorted(curated):
+        name = str(values.get(("B", n)) or "")
+        if not re.search(ROW_NAMES[n], name):
+            sys.exit(f"sheet row {n} is {name!r}, expected /{ROW_NAMES[n]}/: did the sheet gain or lose rows? "
+                     "Update the row keys in the curation tables.")
+
+
 NOTES = {
     **{n: "The sheet charges 1 astral per sapling; Humidify waters a whole inventory per cast, so that's an overestimate. The filled plant pot (~3 gp) is left out."
        for n in rows(36, 43)},
@@ -163,16 +207,30 @@ def translate(f):
 SAFE_NAMES = {"REF", "RNG", "MAX", "MIN", "ROUNDUP", "XL", "TAXV", "None"}
 
 
+_SAFE_NODES = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Add, ast.Sub, ast.Mult, ast.Div,
+               ast.USub, ast.UAdd, ast.Load, ast.Call, ast.Name, ast.Constant)
+
+
 def safe_eval(s, env):
-    """eval() a translated formula, which comes from an untrusted sheet: only
-    our helper names, numbers, arithmetic and quoted strings may appear, and
-    builtins are off."""
-    bare = re.sub(r"'[^']*'|\"[^\"]*\"", "", s)
-    names = set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", bare))
-    rest = re.sub(r"[A-Za-z_][A-Za-z_0-9]*", "", bare)
-    if names - SAFE_NAMES or set(rest) - set("0123456789.+-*/(), "):
-        raise ValueError(f"unsafe formula: {s[:80]!r}")
-    return eval(s, {"__builtins__": {}, **env})
+    """eval() a translated formula, which comes from an untrusted sheet. The
+    parsed AST may contain only arithmetic, calls to our helper names, and
+    int/float/str/None constants (no attributes, subscripts, comprehensions
+    or lambdas), and builtins are off. Raises ValueError otherwise."""
+    try:
+        tree = ast.parse(s, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"unparseable formula: {s[:80]!r}") from e
+    for node in ast.walk(tree):
+        ok = isinstance(node, _SAFE_NODES)
+        if isinstance(node, ast.Name):
+            ok = node.id in SAFE_NAMES
+        elif isinstance(node, ast.Call):
+            ok = isinstance(node.func, ast.Name) and not node.keywords
+        elif isinstance(node, ast.Constant):
+            ok = node.value is None or type(node.value) in (int, float, str)
+        if not ok:
+            raise ValueError(f"unsafe formula ({type(node).__name__}): {s[:80]!r}")
+    return eval(compile(tree, "<sheet>", "eval"), {"__builtins__": {}, **env})
 
 
 def flat(a):
@@ -317,7 +375,7 @@ def apply_fix(outs, ins, fix):
         side = outs if old in outs else ins if old in ins else None
         if side is None:
             raise ValueError(f"replace: item {old} not in legs")
-        side[new] = side.pop(old)
+        side[new] = side.get(new, 0) + side.pop(old)
     for iid, qty in fix.get("in_set", {}).items():
         ins[iid] = qty
     for iid, qty in fix.get("out_set", {}).items():
@@ -376,6 +434,7 @@ def main(xlsx, mapping_path):
     by_id = {v["id"]: v for v in items.values()}
     mapping = {m["id"]: m for m in json.load(open(mapping_path))}
     rels = existing_relations()
+    check_rows(values)
 
     recipes, held = [], []
     category = ""
@@ -412,10 +471,14 @@ def main(xlsx, mapping_path):
             continue
 
         flags = set()
-        expr = symbolic(f, formulas, values, items, flags)
+        try:
+            expr = symbolic(f, formulas, values, items, flags)
+            exact = safe_eval(translate(f), numeric_env(values, items))
+        except (ValueError, KeyError, TypeError) as e:
+            held.append((n, name, f"formula rejected: {e}"))
+            continue
         outs, ins, fee, value = to_legs(expr, values, items, by_id, flags)
         sheet_c = values.get(("C", n))
-        exact = safe_eval(translate(f), numeric_env(values, items))
         tol = sum(outs.values()) + 1  # ROUNDUP slack: up to 1 gp per unit sold
         if abs(exact - sheet_c) > 1e-6:
             flags.add("translation_mismatch")
@@ -438,6 +501,8 @@ def main(xlsx, mapping_path):
         if n in LEG_FIX:
             apply_fix(outs, ins, LEG_FIX[n])
             notes.append(LEG_FIX[n]["note"])
+            if set(outs) & set(ins):
+                sys.exit(f"row {n} {name}: LEG_FIX left an item on both sides")
         if n in ACCEPT:
             notes.append(ACCEPT[n])
         if not outs or not ins:
