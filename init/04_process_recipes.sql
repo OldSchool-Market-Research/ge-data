@@ -13,7 +13,11 @@
 --   * actions_per_hour + throughput: 'fixed' (a player-speed rate),
 --     'volume_capped' (that rate, but never more than the market trades),
 --     'volume_bound' (no player-speed limit; the market's hourly volume is
---     the ceiling), 'unknown' (no rate recorded).
+--     the ceiling), 'unknown' (no rate recorded). Buy limits cap every kind:
+--     a consumer must never rank a recipe at actions_per_hour alone
+--     (06's process_quotes_now applies the cap).
+--   * a 'reverse' link is only valid on a reversible item_relations row;
+--     the sanity queries in docs/database-setup.md check it.
 --
 -- A recipe that already exists in item_relations links to it by name with
 -- relation_name + relation_direction instead of repeating its legs, so the
@@ -48,6 +52,10 @@ CREATE TABLE IF NOT EXISTS process_recipes (
   source             text    NOT NULL,
   notes              text,
   CHECK ((relation_name IS NULL) = (relation_direction IS NULL)),
-  CHECK ((relation_name IS NULL) = (inputs IS NOT NULL AND outputs IS NOT NULL)),
+  -- exactly one source of legs: a link, or both own leg arrays (non-empty)
+  CHECK (CASE WHEN relation_name IS NULL
+              THEN jsonb_typeof(inputs) = 'array' AND jsonb_array_length(inputs) > 0
+               AND jsonb_typeof(outputs) = 'array' AND jsonb_array_length(outputs) > 0
+              ELSE inputs IS NULL AND outputs IS NULL END),
   CHECK ((throughput IN ('fixed', 'volume_capped')) = (actions_per_hour IS NOT NULL))
 );

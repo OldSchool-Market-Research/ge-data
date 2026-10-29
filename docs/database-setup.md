@@ -97,9 +97,13 @@ and a `throughput` kind (`fixed` / `volume_capped` / `volume_bound` /
 `relation_name` + `relation_direction` and does not repeat its legs.
 
 The seed is **generated** from a friend's "Processing Flips" Google Sheet by
-`tools/process-import/import.py` (see its README). Every unlinked row reproduces
-the sheet's own cached profit/action from its legs. Skill/quest requirements
-are not curated for these rows yet.
+`tools/process-import/import.py` (see its README). Each row's parsed legs first
+reproduce the sheet's own cached profit/action, then get corrected where the
+sheet disagrees with the game (chained intermediates cancelled, Wiki-checked
+spell costs and yields, NPC/buy-limit "rates" made volume-bound); each
+correction is written into the row's `notes`. The seed is one transaction and
+deletes importer rows (`source` 'Main!...') it no longer generates. Skill/quest
+requirements are not curated for these rows yet.
 
 **Apply to prod** after 02+03, as the `ge-data` role:
 
@@ -118,6 +122,10 @@ FROM process_recipes p,
 WHERE NOT EXISTS (
   SELECT 1 FROM items i WHERE i.item_id = (l->>'item_id')::int
 );
+
+-- a reverse link must point at a reversible relation
+SELECT p.name FROM process_recipes p JOIN item_relations r ON r.name = p.relation_name
+WHERE p.relation_direction = 'reverse' AND NOT r.reversible;
 ```
 
 ## Running the DB locally (nix dev shell)
