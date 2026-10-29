@@ -32,6 +32,11 @@
 -- Prod apply (after 04+05, as the ge-data role; re-runnable):
 --   psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -f init/06_process_quotes.sql
 
+-- Dropped and recreated (not just CREATE OR REPLACE) so a column change stays
+-- re-runnable; nothing depends on these views, and ge-data's default privileges
+-- re-grant SELECT to ge-mcp / ge-orchestrator when it recreates them.
+DROP VIEW IF EXISTS process_quotes_now, process_legs_now;
+
 -- Every leg of every recipe with its latest quote and 24h volume. Linked
 -- recipes take their legs from item_relations (reverse direction swaps them).
 -- Both lookups are LATERAL ... LIMIT 1 / a 24h sum per LEG, never DISTINCT ON
@@ -39,7 +44,7 @@
 -- item_ids are involved (the Aug 2026 combo_screen timeout). The legs CTE is
 -- referenced once, so it's inlined and a recipe_id filter reaches it: one
 -- recipe costs a handful of index probes, not the whole universe.
-CREATE OR REPLACE VIEW process_legs_now AS
+CREATE VIEW process_legs_now AS
 WITH legs AS (
   SELECT p.recipe_id, 'buy'::text AS side, (l->>'item_id')::int AS item_id, (l->>'qty')::numeric AS qty
   FROM process_recipes p
@@ -75,7 +80,7 @@ LEFT JOIN LATERAL (
   WHERE item_id = legs.item_id AND ts > now() - interval '24 hours'
 ) v ON true;
 
-CREATE OR REPLACE VIEW process_quotes_now AS
+CREATE VIEW process_quotes_now AS
 WITH agg AS (
   SELECT l.recipe_id,
          -- a missing or non-positive qty makes the recipe unpriceable rather

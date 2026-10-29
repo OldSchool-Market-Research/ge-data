@@ -20,8 +20,8 @@ type Store struct {
 }
 
 // New dials the pool with a small default config. The pool's default
-// MaxConns (4) is fine for one ingester instance — four loops, each
-// flushing once a minute or once every five minutes.
+// MaxConns (4) is fine for one ingester instance — four loops, flushing
+// between twice a minute (/latest) and once a day (/mapping).
 func New(ctx context.Context, url string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
