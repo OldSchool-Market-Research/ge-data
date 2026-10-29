@@ -17,7 +17,7 @@ the ingester isn't).
 | Component | What it is | State | Scales? |
 |---|---|---|---|
 | **Database** | PostgreSQL 16 + TimescaleDB extension | persistent (the price history) | no — single primary |
-| **Ingester** | Go service: 3 poll loops + mapping load | stateless | **no — exactly 1 instance, ever** |
+| **Ingester** | Go service: 3 poll loops + mapping load + hourly process snapshot | stateless | **no — exactly 1 instance, ever** |
 
 ## Requirements (environment-independent)
 
@@ -51,7 +51,9 @@ let it fill.
 Logs are structured (`log/slog`, logfmt) to stderr — `kubectl logs`. Lifecycle:
 `ingester started` / `ingester shut down cleanly`; per-loop `tick failed`
 (`loop=`, `err=`) on a bad tick. The "it's working" signal is the per-tick writes:
-`mapping refreshed`, `5m block written`, `1m tick written` (each with row counts).
+`mapping refreshed`, `5m block written`, `1m tick written` (each with row counts),
+and hourly at hh:05 `process snapshot written` (rows=0 means that hour was
+already taken; `tick failed loop=process_snapshot` until init/04-06 are applied).
 
 ### The single-instance rule (why, and how it's enforced)
 

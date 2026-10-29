@@ -139,10 +139,16 @@ the ingester can't drift apart:
 - `process_quotes_now` (view): per recipe, slow margin (buy at low, sell at
   high minus tax) and insta margin (the reverse), the real GE tax (sale/50,
   5M cap), and gp/hr at an effective rate = LEAST(player actions/hr, buy-limit
-  rate, market-volume rate). A margin is NULL when a leg has no price.
-- `process_snapshots` (hypertable): the ingester's hourly copy of
-  `process_quotes_now`, keyed `(ts = the hour, recipe_id)`. History for trend and
-  top-performer queries.
+  rate, market-volume rate), with the market rate taken from the side each
+  order type fills against (separately for slow and insta). Every throughput
+  kind is capped by the buy limit and the market; `throughput` only records
+  where the player-speed figure came from. A margin is NULL when a leg has no
+  price or a malformed qty; `unknown_limit_legs` counts buy legs whose limit is
+  unknown (the limit cap skips them, so it's optimistic).
+- `process_snapshots` (hypertable): the ingester's hourly (hh:05) copy of
+  `process_quotes_now`, keyed `(ts = the hour, recipe_id)`, with the recipe
+  name. No FK to `process_recipes`, so history outlives a recipe the seed
+  deletes or renames. History for trend and top-performer queries.
 
 **Apply to prod** after 04+05, as `ge-data` (re-runnable):
 

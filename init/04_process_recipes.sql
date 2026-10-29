@@ -13,9 +13,10 @@
 --   * actions_per_hour + throughput: 'fixed' (a player-speed rate),
 --     'volume_capped' (that rate, but never more than the market trades),
 --     'volume_bound' (no player-speed limit; the market's hourly volume is
---     the ceiling), 'unknown' (no rate recorded). Buy limits cap every kind:
---     a consumer must never rank a recipe at actions_per_hour alone
---     (the quote view in init/06 applies the cap).
+--     the ceiling), 'unknown' (no rate recorded). The kind records where the
+--     player-speed figure came from: every kind is capped by buy limits and
+--     market volume, and a consumer must never rank on actions_per_hour alone
+--     (06's process_quotes_now applies both caps).
 --   * a 'reverse' link is only valid on a reversible item_relations row;
 --     the sanity queries in docs/database-setup.md check it.
 --

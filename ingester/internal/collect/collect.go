@@ -1,5 +1,6 @@
-// Package collect wires the wiki.Client to the store.Store on independent
-// loops (plus one DB-only loop, the hourly process snapshot). Each loop is a `tick` over a fixed interval: the wiki
+// Package collect wires the wiki.Client to the store.Store on three
+// independent poll loops, plus one DB-only loop (the hourly process
+// snapshot). Each poll loop is a `tick` over a fixed interval: the wiki
 // fetch is the body, the store write is the tail, and a single bad fetch is
 // logged and skipped — the loop must keep running across transient errors.
 package collect
@@ -16,7 +17,7 @@ import (
 )
 
 // Deps groups the wiki client, the store, and the configured intervals. One
-// struct so the three loops share the same plumbing without each having to
+// struct so the loops share the same plumbing without each having to
 // re-plumb config.
 type Deps struct {
 	Cfg    config.Config
@@ -187,19 +188,49 @@ func Prices1mLoop(ctx context.Context, d Deps) {
 // quote (the process_quotes_now view, init/06) into process_snapshots, keyed
 // by the hour. No Wiki fetch: the view prices recipes from the rows the
 // other loops already wrote, and owns all the math. Until init/04-06 are
-// applied the insert fails; tick logs it and retries next hour, so the
-// ingester can ship before the schema does.
+// applied the insert fails; the error is logged and retried next hour, so
+// the ingester can ship before the schema does.
+//
+// Unlike tick(), this does NOT fire on start: a fresh process (or one back
+// from an outage) would snapshot before the first /latest write and the PK
+// would keep that stale row for the whole hour. It runs at the next
+// hh:05 (the 1m/5m loops have caught up by then) and every hour after.
 // ---------------------------------------------------------------------------
 
+const snapshotOffset = 5 * time.Minute
+
 func ProcessSnapshotLoop(ctx context.Context, d Deps) {
-	tick(ctx, "process_snapshot", d.Cfg.SnapshotInterval, func(ctx context.Context) error {
-		n, err := d.Store.SnapshotProcessQuotes(ctx)
+	now := time.Now()
+	next := now.Truncate(time.Hour).Add(snapshotOffset)
+	if !next.After(now) {
+		next = next.Add(time.Hour)
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(time.Until(next)):
+	}
+	run := func() {
+		qctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		n, err := d.Store.SnapshotProcessQuotes(qctx)
 		if err != nil {
-			return err
+			slog.Error("tick failed", "loop", "process_snapshot", "err", err)
+			return
 		}
 		slog.Info("process snapshot written", "rows", n)
-		return nil
-	})
+	}
+	run()
+	t := time.NewTicker(d.Cfg.SnapshotInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
 }
 
 // maxGETax is the per-item cap on Grand Exchange tax: 5,000,000 coins. The cap

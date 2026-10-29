@@ -20,7 +20,7 @@ type Store struct {
 }
 
 // New dials the pool with a small default config. The pool's default
-// MaxConns (4) is fine for one ingester instance — three loops, each
+// MaxConns (4) is fine for one ingester instance — four loops, each
 // flushing once a minute or once every five minutes.
 func New(ctx context.Context, url string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -197,12 +197,14 @@ func (s *Store) InsertPrices1m(ctx context.Context, ts any, rows []Prices1mRow) 
 
 const snapshotProcessQuotesSQL = `
 INSERT INTO process_snapshots (
-  ts, recipe_id, margin_slow, margin_insta, gp_hr_theoretical, gp_hr, gp_hr_insta,
-  effective_actions_per_hour, limit_actions_per_hour, market_actions_per_hour,
-  missing_legs, max_leg_age_s)
-SELECT date_trunc('hour', now()), recipe_id, margin_slow, margin_insta, gp_hr_theoretical,
-       gp_hr, gp_hr_insta, effective_actions_per_hour, limit_actions_per_hour,
-       market_actions_per_hour, missing_legs, max_leg_age_s
+  ts, recipe_id, name, margin_slow, margin_insta, gp_hr_theoretical, gp_hr, gp_hr_insta,
+  effective_actions_per_hour, effective_actions_per_hour_insta, limit_actions_per_hour,
+  market_actions_per_hour, market_actions_per_hour_insta,
+  missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s)
+SELECT date_trunc('hour', now()), recipe_id, name, margin_slow, margin_insta, gp_hr_theoretical,
+       gp_hr, gp_hr_insta, effective_actions_per_hour, effective_actions_per_hour_insta,
+       limit_actions_per_hour, market_actions_per_hour, market_actions_per_hour_insta,
+       missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s
 FROM process_quotes_now
 ON CONFLICT (ts, recipe_id) DO NOTHING
 `

@@ -1,7 +1,8 @@
 // Command ingester is the ge-data collection process. One instance only:
-// it runs three independent loops (mapping refresh, /5m poll, /1m poll)
+// it runs three independent poll loops (mapping refresh, /5m poll, /1m poll)
 // against the OSRS Wiki real-time prices API and writes the results to the
-// TimescaleDB described in docs/database-setup.md.
+// TimescaleDB described in docs/database-setup.md, plus an hourly loop that
+// snapshots the processing-recipe quotes (no Wiki call).
 //
 // Process model:
 //   - One *wiki.Client, one *store.Store, one Deps shared across the loops.
