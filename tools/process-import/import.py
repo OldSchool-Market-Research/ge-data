@@ -20,6 +20,7 @@ Usage (no system python on eldo; run from ge-data/):
 mapping.json is the OSRS Wiki /mapping (same source as the `items` table):
     curl -A '<contact>' https://prices.runescape.wiki/api/v1/osrs/mapping -o mapping.json
 """
+import ast
 import json
 import math
 import re
@@ -75,6 +76,93 @@ RENAME = {
     "Repair Torva Platbody (3)": "Repair Torva Platebody (3)",
 }
 RECATEGORY = {"Indendiary Cannonballs": "Incendiary Cannonballs"}
+# The pyre rows sit under the sheet's GWD header with no header of their own.
+RECATEGORY_ROWS = {n: "Pyre Logs" for n in range(421, 434)}
+
+
+def rows(a, b):
+    return range(a, b + 1)
+
+
+# Wiki-checked corrections to legs the sheet gets wrong. The self-check only
+# proves a parse matches the SHEET; these make it match the GAME. Applied after
+# parsing, before linking. Keys are sheet rows; each fix says why in `note`.
+#   in_set / out_set: {item_id: qty} (adds the leg if missing)
+#   replace:          {old_item_id: new_item_id} on either side (must exist)
+# Rune convention for every spell here (Plank Make, Superglass Make, Tan
+# Leather, Degrime): elemental runes are assumed to come from a staff, as the
+# sheet does for Plank Make and Superglass; every other rune is a leg.
+TAN = dict(in_set={9075: 2}, note="Tan Leather costs 2 astral + 1 nature per cast (+5 fire, assumed from a staff) (Wiki); the sheet charges 1 astral.")
+DEGRIME = dict(in_set={561: 2}, note="Degrime costs 2 nature per cast (+4 earth, assumed from a staff) (Wiki); the sheet charges 1 nature.")
+CHEM = dict(in_set={21163: 0.015}, note="Amulet of chemistry: 15% proc per potion over 10 charges = 0.015 amulets/action; the sheet omits the /10 here.")
+CLEAN_CADANTINE = dict(replace={215: 265}, note="Zahur makes unfinished potions from clean herbs only (Wiki); the sheet buys grimy cadantine.")
+ZENYTE = dict(in_set={2357: 1, 564: 1}, note="Adds the gold bar and the Lvl-7 Enchant cosmic rune the sheet leaves out.")
+FISH_CRATE = dict(replace={32366: 32364}, note="Emptying a filled crate returns a camphor crate (Wiki); the sheet values it as an empty fish crate.")
+LEG_FIX = {
+    **{n: TAN for n in rows(24, 27)},
+    **{n: DEGRIME for n in rows(60, 74)},
+    200: CHEM,  # Making Bastion Potion
+    202: CHEM,  # Making Battlemage Potion
+    # The "+ unf" rows also chain Cadantine Blood unf, so they carry both errors.
+    **{n: dict(in_set=CHEM["in_set"], replace=CLEAN_CADANTINE["replace"],
+               note=CHEM["note"] + " " + CLEAN_CADANTINE["note"]) for n in (201, 203)},
+    246: CLEAN_CADANTINE,
+    **{n: ZENYTE for n in rows(303, 310)},
+    **{n: dict(in_set={**ZENYTE["in_set"], 1759: 1}, note=ZENYTE["note"] + " Torture is an amulet, so it also needs a ball of wool.")
+       for n in (305, 306)},
+    **{n: FISH_CRATE for n in rows(164, 169)},
+    221: dict(out_set={11994: 4.5}, note="A lava scale crushes to 3-6 shards; 4.5 is the mean (the sheet uses the minimum, 3)."),
+}
+# Sheet rows whose "actions/hr" is really a buy limit (e.g. 13000*12, 200*12)
+# or an NPC bulk exchange, not player speed. They're bounded by buy limits
+# and market volume instead.
+VOLUME_BOUND_ROWS = {*rows(76, 90), *rows(231, 249), 299, 300, *rows(36, 43), 172, 216}
+VOLUME_BOUND_NOTE = "The sheet's actions/hr here came from a buy limit or an NPC bulk exchange, not player speed; bounded by buy limits and market volume instead."
+# Every row-keyed curation entry names the recipe it expects (a regex on the
+# sheet's column B). If the sheet gains or loses a row, the keys would point at
+# the wrong recipes; check_rows() refuses to run instead.
+ROW_NAMES = {
+    **{n: r"Leather$" for n in rows(24, 27)},
+    **{n: r"Sap$" for n in rows(36, 43)},
+    56: r"^Rosewood Plank$",
+    **{n: r" Spell$" for n in rows(60, 74)},
+    **{n: r" Zahur$" for n in rows(76, 90)},
+    99: r"^1 Tick Karambwans$",
+    **{n: r"Battlestaves HA$" for n in (109, 111, 113, 115)},
+    **{n: r"^Unboxing " for n in rows(164, 169)},
+    172: r"^Fish Crate Making$",
+    **{n: r"^(Making )?(Bastion|Battlemage) Potion" for n in rows(200, 203)},
+    216: r"^Crushed Nest$",
+    221: r"^Lava Scale Shard$",
+    **{n: r" unf$" for n in rows(231, 249)},
+    299: r"^Teeth to Dragon Dart Tips$",
+    300: r"^Fang to Dragon Arrowtips$",
+    **{n: r"(Anguish|Torture|Suffering|Tormented)" for n in rows(303, 310)},
+    322: r"^Accursed Sceptre Making$",
+    **{n: r"^Fortify Masori" for n in rows(405, 407)},
+    **{n: r"^Repair Torva" for n in rows(409, 411)},
+    413: r"^Make ZCB$",
+    **{n: r"(Pyre|Logs)$" for n in rows(421, 433)},
+}
+
+
+def check_rows(values):
+    curated = {*LINK, *ACCEPT, *DEFER_ROWS, *RECATEGORY_ROWS, *LEG_FIX, *VOLUME_BOUND_ROWS, *NOTES}
+    missing = sorted(curated - set(ROW_NAMES))
+    if missing:
+        sys.exit(f"curated rows without a ROW_NAMES guard: {missing}")
+    for n in sorted(curated):
+        name = str(values.get(("B", n)) or "")
+        if not re.search(ROW_NAMES[n], name):
+            sys.exit(f"sheet row {n} is {name!r}, expected /{ROW_NAMES[n]}/: did the sheet gain or lose rows? "
+                     "Update the row keys in the curation tables.")
+
+
+NOTES = {
+    **{n: "The sheet charges 1 astral per sapling; Humidify waters a whole inventory per cast, so that's an overestimate. The filled plant pot (~3 gp) is left out."
+       for n in rows(36, 43)},
+    99: "Same legs as Cooking Karambwans at 1-tick speed.",
+}
 
 
 # ── Sheet access ────────────────────────────────────────────────────────────
@@ -114,6 +202,35 @@ def translate(f):
     s = re.sub(r"(?<![A-Za-z_'])\$?([A-Z]{1,2})\$?(\d+)(?![\d(])", r"REF('\1',\2)", s)
     s = re.sub(r"\b(roundup|max|min|if)\(", lambda m: m.group(1).upper() + "(", s, flags=re.I)
     return s.replace("(,", "(None,")
+
+
+SAFE_NAMES = {"REF", "RNG", "MAX", "MIN", "ROUNDUP", "XL", "TAXV", "None"}
+
+
+_SAFE_NODES = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Add, ast.Sub, ast.Mult, ast.Div,
+               ast.USub, ast.UAdd, ast.Load, ast.Call, ast.Name, ast.Constant)
+
+
+def safe_eval(s, env):
+    """eval() a translated formula, which comes from an untrusted sheet. The
+    parsed AST may contain only arithmetic, calls to our helper names, and
+    int/float/str/None constants (no attributes, subscripts, comprehensions
+    or lambdas), and builtins are off. Raises ValueError otherwise."""
+    try:
+        tree = ast.parse(s, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"unparseable formula: {s[:80]!r}") from e
+    for node in ast.walk(tree):
+        ok = isinstance(node, _SAFE_NODES)
+        if isinstance(node, ast.Name):
+            ok = node.id in SAFE_NAMES
+        elif isinstance(node, ast.Call):
+            ok = isinstance(node.func, ast.Name) and not node.keywords
+        elif isinstance(node, ast.Constant):
+            ok = node.value is None or type(node.value) in (int, float, str)
+        if not ok:
+            raise ValueError(f"unsafe formula ({type(node).__name__}): {s[:80]!r}")
+    return eval(compile(tree, "<sheet>", "eval"), {"__builtins__": {}, **env})
 
 
 def flat(a):
@@ -183,7 +300,7 @@ def symbolic(f, formulas, values, items, flags, depth=0):
     s = re.sub(r"(?<![\d.])0\.98(?!\d)", "TAXV", translate(f))
     env = dict(REF=REF, RNG=RNG, MAX=lambda *a: pick(a), MIN=lambda *a: pick(a),
                ROUNDUP=lambda x, d: x, XL=XL, TAXV=TAX)
-    return sp.sympify(eval(s, env))
+    return sp.sympify(safe_eval(s, env))
 
 
 def resolve(sym, values, items, by_id):
@@ -200,36 +317,73 @@ def resolve(sym, values, items, by_id):
 
 
 def to_legs(expr, values, items, by_id, flags):
+    """Read legs off the expanded expression. Returns (outs, ins, fee, value):
+    outs/ins as {item_id: qty}, fee per action, and `value` = those legs and
+    fee re-priced at the sheet's cached prices (outputs at 0.98 x high), the
+    figure the caller compares to the sheet. Built term by term from what was
+    extracted, so a term the extraction drops shows up as a mismatch."""
     e = sp.expand(expr)
     outs, ins = {}, {}
-    const = float(e.subs({s: 0 for s in e.free_symbols}))
+    value = 0.0
+    # The constant must not depend on TAX: a fee inside a taxed bracket,
+    # e.g. ROUNDUP((X5-1000)*0.98), would otherwise vanish from fee_gp.
+    const = sp.Poly(e.subs({s: 0 for s in e.free_symbols - {TAX}}), TAX)
+    if const.degree() > 0:
+        flags.add("taxed_constant")
+    fee = -float(const.coeff_monomial(1))
+    value -= fee
     for s in sorted(e.free_symbols - {TAX}, key=lambda s: s.name):
         poly = sp.Poly(e.coeff(s), TAX)
         if poly.degree() > 1:
             flags.add("nonlinear")
         taxed, untaxed = float(poly.coeff_monomial(TAX)), float(poly.coeff_monomial(1))
-        iid, _ = resolve(s, values, items, by_id)
+        iid, price = resolve(s, values, items, by_id)
         if iid is None:
             flags.add("unmapped_item")
         if taxed > 0:
             outs[iid] = outs.get(iid, 0) + taxed
+            value += taxed * 0.98 * price
         if untaxed > 0:
             flags.add("untaxed_output")
         if untaxed < 0:
             ins[iid] = ins.get(iid, 0) - untaxed
+            value += untaxed * price
         if taxed < 0:
             flags.add("taxed_input")
         if s.name[0] == "L" and taxed > 0:
             flags.add("sells_at_low")
-    leg = lambda d: [{"item_id": k, "qty": round(v, 6)} for k, v in sorted(d.items(), key=lambda kv: str(kv[0]))]
-    return leg(outs), leg(ins), const
+    return outs, ins, fee, value
 
 
-def self_check(expr, values, items, by_id):
-    sub = {TAX: 0.98}
-    for s in expr.free_symbols - {TAX}:
-        sub[s] = resolve(s, values, items, by_id)[1]
-    return float(expr.subs(sub))
+def net(outs, ins):
+    """Cancel an item that is both sold and bought in one action. The sheet
+    chains steps by adding their profits (C366+C363), which sells the
+    intermediate at high and buys it back at low: a spread nobody trades."""
+    netted = []
+    for iid in set(outs) & set(ins):
+        n = min(outs[iid], ins[iid])
+        outs[iid] -= n
+        ins[iid] -= n
+        netted.append(iid)
+    outs = {k: v for k, v in outs.items() if v > 1e-9}
+    ins = {k: v for k, v in ins.items() if v > 1e-9}
+    return outs, ins, netted
+
+
+def apply_fix(outs, ins, fix):
+    for old, new in fix.get("replace", {}).items():
+        side = outs if old in outs else ins if old in ins else None
+        if side is None:
+            raise ValueError(f"replace: item {old} not in legs")
+        side[new] = side.get(new, 0) + side.pop(old)
+    for iid, qty in fix.get("in_set", {}).items():
+        ins[iid] = qty
+    for iid, qty in fix.get("out_set", {}).items():
+        outs[iid] = qty
+
+
+def leg_list(d):
+    return [{"item_id": k, "qty": round(v, 6)} for k, v in sorted(d.items())]
 
 
 def throughput(f):
@@ -237,12 +391,13 @@ def throughput(f):
     if not isinstance(f, str):
         return None, "unknown"
     s = translate(f)
-    m = re.fullmatch(r"REF\('C',\d+\)\*([\d.*]+)/(\d+)(\*12)?", s)
+    product = lambda p: math.prod(float(x) for x in p.split("*"))
+    m = re.fullmatch(r"REF\('C',\d+\)\*([\d.]+(?:\*[\d.]+)*)/(\d+)(\*12)?", s)
     if m:
-        return round(eval(m.group(1)) * 1_000_000 / int(m.group(2)) * (12 if m.group(3) else 1), 3), "fixed"
-    m = re.fullmatch(r"([\d.*]+)\*REF\('C',\d+\)/(\d+)", s)
+        return round(product(m.group(1)) * 1_000_000 / int(m.group(2)) * (12 if m.group(3) else 1), 3), "fixed"
+    m = re.fullmatch(r"([\d.]+(?:\*[\d.]+)*)\*REF\('C',\d+\)/(\d+)", s)
     if m:
-        return round(eval(m.group(1)) * 1_000_000 / int(m.group(2)), 3), "fixed"
+        return round(product(m.group(1)) * 1_000_000 / int(m.group(2)), 3), "fixed"
     m = re.search(r"(\d+)\*(\d+)\)", s)
     if m and "'T'" in s:
         return int(m.group(1)) * int(m.group(2)), "volume_capped"
@@ -279,6 +434,7 @@ def main(xlsx, mapping_path):
     by_id = {v["id"]: v for v in items.values()}
     mapping = {m["id"]: m for m in json.load(open(mapping_path))}
     rels = existing_relations()
+    check_rows(values)
 
     recipes, held = [], []
     category = ""
@@ -289,14 +445,20 @@ def main(xlsx, mapping_path):
         name, f = values.get(("B", n)), formulas.get(("C", n))
         if not name:
             continue
-        if not isinstance(f, str) or not f.startswith("=") or re.search(r"\bif\(", f, re.I) \
-                or re.fullmatch(r"=-?(1\*)?\$?[DY]\$?\d+", f):
-            continue  # section headers, helper lookups, "undo set" mirrors
-        cat = RECATEGORY.get(category, category)
+        if not isinstance(f, str) or not f.startswith("=") or re.search(r"\bif\(", f, re.I):
+            continue  # section headers, helper lookups
+        if re.fullmatch(r"=-?(1\*)?\$?[DY]\$?\d+", f):
+            held.append((n, name, "mirror of another row (an 'undo set' or a helper price), not a recipe"))
+            continue
+        cat = RECATEGORY_ROWS.get(n) or RECATEGORY.get(category, category)
         if category in DEFER or n in DEFER_ROWS:
             held.append((n, name, DEFER.get(category) or DEFER_ROWS[n]))
             continue
         aph, kind = throughput(formulas.get(("E", n)))
+        notes = [NOTES[n]] if n in NOTES else []
+        if n in VOLUME_BOUND_ROWS:
+            aph, kind = None, "volume_bound"
+            notes.append(VOLUME_BOUND_NOTE)
         rec = dict(row=n, name=RENAME.get(name, name), category=cat, aph=aph, throughput=kind,
                    relation=None, direction=None, inputs=None, outputs=None, fee=0.0, notes=None)
 
@@ -304,37 +466,58 @@ def main(xlsx, mapping_path):
             if LINK[n] not in rels:
                 sys.exit(f"row {n}: LINK target {LINK[n]!r} not in item_relations seed")
             rec["relation"], rec["direction"] = LINK[n], "forward"
+            rec["notes"] = " ".join(notes) or None
             recipes.append(rec)
             continue
 
         flags = set()
-        expr = symbolic(f, formulas, values, items, flags)
-        outs, ins, const = to_legs(expr, values, items, by_id, flags)
+        try:
+            expr = symbolic(f, formulas, values, items, flags)
+            exact = safe_eval(translate(f), numeric_env(values, items))
+        except (ValueError, KeyError, TypeError) as e:
+            held.append((n, name, f"formula rejected: {e}"))
+            continue
+        outs, ins, fee, value = to_legs(expr, values, items, by_id, flags)
         sheet_c = values.get(("C", n))
-        exact = eval(translate(f), numeric_env(values, items))
-        tol = sum(l["qty"] for l in outs) + 1  # ROUNDUP slack: up to 1 gp per unit sold
+        tol = sum(outs.values()) + 1  # ROUNDUP slack: up to 1 gp per unit sold
         if abs(exact - sheet_c) > 1e-6:
             flags.add("translation_mismatch")
-        if abs(self_check(expr, values, items, by_id) - sheet_c) > tol and n not in ACCEPT:
+        if abs(value - sheet_c) > tol and n not in ACCEPT:
             flags.add("legs_mismatch")
-        for l in outs + ins:
-            if l["item_id"] not in mapping:
+        for iid in [*outs, *ins]:
+            if iid not in mapping:
                 flags.add("item_not_in_mapping")
         hard = flags - {"composite"}
         if hard:
             held.append((n, name, "parse: " + ",".join(sorted(hard))))
             continue
 
+        # Past the self-check, the legs match the sheet. Now make them match
+        # the game: cancel chained intermediates, then apply Wiki corrections.
+        outs, ins, netted = net(outs, ins)
+        if netted:
+            notes.insert(0, "Chains two steps; the intermediate (item "
+                         + ", ".join(str(i) for i in sorted(netted)) + ") is made and used, not traded.")
+        if n in LEG_FIX:
+            apply_fix(outs, ins, LEG_FIX[n])
+            notes.append(LEG_FIX[n]["note"])
+            if set(outs) & set(ins):
+                sys.exit(f"row {n} {name}: LEG_FIX left an item on both sides")
         if n in ACCEPT:
-            rec["notes"] = ACCEPT[n]
-        if "composite" in flags:
-            rec["notes"] = "Chains two steps from the sheet (intermediate made, then processed)."
-        rec["fee"] = round(-const, 4)
-        link = find_link(outs, ins, rels)
+            notes.append(ACCEPT[n])
+        if not outs or not ins:
+            sys.exit(f"row {n} {name}: no {'outputs' if not outs else 'inputs'} left after netting/fixes")
+        for iid in [*outs, *ins]:
+            if iid not in mapping:
+                sys.exit(f"row {n} {name}: corrected leg item {iid} not in mapping")
+        rec["fee"] = round(fee, 4)
+        rec["notes"] = " ".join(notes) or None
+        outs_l, ins_l = leg_list(outs), leg_list(ins)
+        link = find_link(outs_l, ins_l, rels)
         if link:
             rec["relation"], rec["direction"] = link
         else:
-            rec["inputs"], rec["outputs"] = ins, outs
+            rec["inputs"], rec["outputs"] = ins_l, outs_l
         recipes.append(rec)
 
     names = Counter(r["name"] for r in recipes)
@@ -370,28 +553,34 @@ def write_sql(recipes, held):
     lines = [
         "-- process_recipes seed: GENERATED by tools/process-import/import.py from the",
         "-- \"Processing Flips\" sheet (Main tab). Don't hand-edit rows; change the",
-        "-- curation tables in the importer and re-run it. Every row without a",
-        "-- relation_name reproduced the sheet's own cached profit/action from its legs.",
+        "-- curation tables in the importer and re-run it. Each unlinked row's parsed",
+        "-- legs reproduced the sheet's own cached profit/action (except rows listed in",
+        "-- ACCEPT), and were then corrected where the sheet disagrees with the game",
+        "-- (chained intermediates cancelled, Wiki fixes in LEG_FIX); every correction",
+        "-- is described in the row's notes.",
         "--",
-        "-- Re-runnable: ON CONFLICT (name) DO UPDATE refreshes rows in place.",
+        "-- Re-runnable and exact: one transaction upserts every row and deletes",
+        "-- importer rows (source 'Main!...') whose name is no longer generated.",
+        "",
+        "BEGIN;",
         "",
         "INSERT INTO process_recipes (name, category, relation_name, relation_direction, inputs, outputs,",
         "                             fee_gp, actions_per_hour, throughput, source, notes) VALUES",
     ]
-    rows, last = [], None
+    vals, last = [], None
     for r in recipes:
         if r["category"] != last:
-            rows.append(f"\n-- ── {r['category']} ──")
+            vals.append(f"\n-- ── {r['category']} ──")
             last = r["category"]
-        rows.append(f"({q(r['name'])}, {q(r['category'])}, {q(r['relation'])}, {q(r['direction'])}, {legs_sql(r['inputs'])}, "
+        vals.append(f"({q(r['name'])}, {q(r['category'])}, {q(r['relation'])}, {q(r['direction'])}, {legs_sql(r['inputs'])}, "
                     f"{legs_sql(r['outputs'])}, {num(r['fee'])}, {num(r['aph'])}, {q(r['throughput'])}, "
                     f"'Main!B{r['row']}', {q(r['notes'])}),")
     # drop the trailing comma on the last VALUES row
-    for i in range(len(rows) - 1, -1, -1):
-        if rows[i].endswith("),"):
-            rows[i] = rows[i][:-1]
+    for i in range(len(vals) - 1, -1, -1):
+        if vals[i].endswith("),"):
+            vals[i] = vals[i][:-1]
             break
-    lines += rows
+    lines += vals
     lines += [
         "ON CONFLICT (name) DO UPDATE SET",
         "  category = EXCLUDED.category, relation_name = EXCLUDED.relation_name,",
@@ -399,6 +588,12 @@ def write_sql(recipes, held):
         "  inputs = EXCLUDED.inputs, outputs = EXCLUDED.outputs, fee_gp = EXCLUDED.fee_gp,",
         "  actions_per_hour = EXCLUDED.actions_per_hour, throughput = EXCLUDED.throughput,",
         "  source = EXCLUDED.source, notes = EXCLUDED.notes;",
+        "",
+        "DELETE FROM process_recipes",
+        "WHERE source LIKE 'Main!%'",
+        "  AND name NOT IN (" + ", ".join(q(r["name"]) for r in recipes) + ");",
+        "",
+        "COMMIT;",
         "",
         "-- Held back (not imported):",
     ]

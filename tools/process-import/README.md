@@ -34,19 +34,42 @@ the constant is the per-action fee.
 A row is written only if:
 - the translated formula evaluates exactly to the sheet's cached C value (so the
   translation itself is right), **and**
-- the extracted legs, re-priced at the sheet's cached prices, land within the
-  rounding slack of that value (so no term was lost or misread), **and**
+- the extracted legs and fee, re-priced term by term at the sheet's cached
+  prices, land within the rounding slack of that value (so no term was lost
+  or misread; a constant inside a taxed bracket is a hard flag), **and**
 - every item ID exists in the Wiki mapping.
 
-Rows that match an `item_relations` recipe link to it instead of copying legs.
+That proves the legs match **the sheet**, not the game. So after the check:
+- an item both sold and bought in one action (the sheet chains steps by adding
+  their profits, e.g. `C366+C363`) is cancelled out: the intermediate is made
+  and used, not traded;
+- `LEG_FIX` applies Wiki-checked corrections (spell rune costs, yields, which
+  herb/crate);
+- `VOLUME_BOUND_ROWS` drops "actions/hr" figures that were really buy limits or
+  NPC bulk exchanges.
+
+Every correction is written into the row's `notes`. Rows that match an
+`item_relations` recipe link to it instead of copying legs.
+
+The sheet is untrusted input: formulas are translated to a whitelist of helper
+names and arithmetic and evaluated with builtins disabled.
 
 ## Curation tables (top of `import.py`)
 
 - `LINK`: rows whose formula takes the cheapest of several sources (masori,
   torva), linked to the curated `item_relations` recipe instead.
-- `ACCEPT`: rows where the sheet is wrong and the parse is right.
+- `LEG_FIX`: Wiki-checked leg corrections (`in_set` / `out_set` / `replace`),
+  each with the note it writes.
+- `VOLUME_BOUND_ROWS`: rows whose sheet rate isn't player speed.
+- `NOTES`: caveats attached without changing legs.
+- `ACCEPT`: rows where the sheet's own value is wrong and the parse is right.
 - `DEFER` / `DEFER_ROWS`: categories or rows held back, with the reason.
-- `RENAME` / `RECATEGORY`: typo fixes; `source` keeps the original sheet row.
+- `RENAME` / `RECATEGORY` / `RECATEGORY_ROWS`: typo and grouping fixes;
+  `source` keeps the original sheet row.
+
+The generated SQL is one transaction that upserts every row and deletes
+importer rows whose name it no longer produces, so a rename or a newly held
+row doesn't leave a stale recipe behind.
 
 Don't carry over the sheet's quirks: its tax is a flat 2% with no 5M cap (the
 consumers apply the real tax), and a few rows use different actions/hr in the
