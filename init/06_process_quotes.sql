@@ -67,6 +67,7 @@ WITH legs AS (
 -- 24h sum undercounts until the window refills.)
 SELECT legs.recipe_id, legs.side, legs.item_id, i.name, legs.qty, i.buy_limit,
        l1.high, l1.high_time, l1.low, l1.low_time,
+       i.icon,
        coalesce(v.high_vol_24h, 0) AS high_vol_24h,
        coalesce(v.low_vol_24h, 0)  AS low_vol_24h
 FROM legs
@@ -97,12 +98,14 @@ WITH agg AS (
          min(l.buy_limit / NULLIF(l.qty, 0)) FILTER (WHERE l.side = 'buy') / 4 AS limit_actions_per_hour,
          min(CASE l.side WHEN 'buy' THEN l.low_vol_24h ELSE l.high_vol_24h END / NULLIF(l.qty, 0)) / 24 AS market_actions_per_hour,
          min(CASE l.side WHEN 'buy' THEN l.high_vol_24h ELSE l.low_vol_24h END / NULLIF(l.qty, 0)) / 24 AS market_actions_per_hour_insta,
-         max(extract(epoch FROM now() - CASE l.side WHEN 'buy' THEN l.low_time ELSE l.high_time END))::bigint AS max_leg_age_s
+         max(extract(epoch FROM now() - CASE l.side WHEN 'buy' THEN l.low_time ELSE l.high_time END))::bigint AS max_leg_age_s,
+         -- display only: the recipe's main output (largest sell qty), /mapping icon file
+         (array_agg(l.icon ORDER BY l.qty DESC NULLS LAST, l.item_id) FILTER (WHERE l.side = 'sell'))[1] AS icon
   FROM process_legs_now l
   GROUP BY l.recipe_id
 ),
 rated AS (
-  SELECT p.recipe_id, p.name, p.category, p.throughput, p.actions_per_hour, p.fee_gp,
+  SELECT p.recipe_id, p.name, p.category, p.throughput, p.actions_per_hour, p.fee_gp, a.icon,
          a.gross_slow - p.fee_gp  AS margin_slow,
          a.gross_insta - p.fee_gp AS margin_insta,
          a.missing_legs, a.missing_legs_insta, a.unknown_limit_legs,
@@ -133,7 +136,8 @@ SELECT recipe_id, name, category, throughput, fee_gp,
        round(limit_actions_per_hour, 2)           AS limit_actions_per_hour,
        round(market_actions_per_hour, 2)          AS market_actions_per_hour,
        round(market_actions_per_hour_insta, 2)    AS market_actions_per_hour_insta,
-       missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s
+       missing_legs, missing_legs_insta, unknown_limit_legs, max_leg_age_s,
+       icon
 FROM rated;
 
 -- process_snapshots: the ingester copies process_quotes_now here once an hour

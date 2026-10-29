@@ -133,8 +133,8 @@ WHERE p.relation_direction = 'reverse' AND NOT r.reversible;
 The single home of the processing math, so ge-mcp, the orchestrator API and
 the ingester can't drift apart:
 
-- `process_legs_now` (view): every recipe leg with its latest `prices_1m` quote
-  and trailing-24h `prices_5m` volume. Linked recipes resolve their legs through
+- `process_legs_now` (view): every recipe leg with its latest `prices_1m` quote,
+  trailing-24h `prices_5m` volume, and the item's `/mapping` icon file (display only). Linked recipes resolve their legs through
   `item_relations`.
 - `process_quotes_now` (view): per recipe, slow margin (buy at low, sell at
   high minus tax) and insta margin (the reverse), the real GE tax (sale/50,
@@ -144,7 +144,8 @@ the ingester can't drift apart:
   kind is capped by the buy limit and the market; `throughput` only records
   where the player-speed figure came from. A margin is NULL when a leg has no
   price or a malformed qty; `unknown_limit_legs` counts buy legs whose limit is
-  unknown (the limit cap skips them, so it's optimistic).
+  unknown (the limit cap skips them, so it's optimistic). `icon` is the main
+  output's icon file, for display.
 - `process_snapshots` (hypertable): the ingester's hourly (hh:05) copy of
   `process_quotes_now`, keyed `(ts = the hour, recipe_id)`, with the recipe
   name. No FK to `process_recipes`, so history outlives a recipe the seed
