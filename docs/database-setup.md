@@ -85,6 +85,49 @@ WHERE NOT EXISTS (
 );
 ```
 
+## process_recipes (`init/04_process_recipes.sql` + `05_process_recipes_seed.sql`)
+
+Processing money-makers: conversions that cost player time (planks, keels,
+fish crates, unfinished potions), ranked by gp/hr, not one-off margin.
+Separate from `item_relations` because quantities can be fractional (expected
+yields such as 0.7875 potions per action) and every `item_relations` consumer
+casts qty to `bigint`. Each row adds a per-action `fee_gp`, `actions_per_hour`
+and a `throughput` kind (`fixed` / `volume_capped` / `volume_bound` /
+`unknown`). A recipe that already exists in `item_relations` links to it via
+`relation_name` + `relation_direction` and does not repeat its legs.
+
+The seed is **generated** from a friend's "Processing Flips" Google Sheet by
+`tools/process-import/import.py` (see its README). Each row's parsed legs first
+reproduce the sheet's own cached profit/action, then get corrected where the
+sheet disagrees with the game (chained intermediates cancelled, Wiki-checked
+spell costs and yields, NPC/buy-limit "rates" made volume-bound); each
+correction is written into the row's `notes`. The seed is one transaction and
+deletes importer rows (`source` 'Main!...') it no longer generates. Skill/quest
+requirements are not curated for these rows yet.
+
+**Apply to prod** after 02+03, as the `ge-data` role:
+
+```bash
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data \
+  -f init/04_process_recipes.sql -f init/05_process_recipes_seed.sql
+```
+
+**Sanity check after (re)seeding.** Same rule as above: any row returned is a
+curation bug.
+
+```sql
+SELECT p.name, (l->>'item_id')::int AS missing_item_id
+FROM process_recipes p,
+     LATERAL jsonb_array_elements(coalesce(p.inputs, '[]') || coalesce(p.outputs, '[]')) AS l
+WHERE NOT EXISTS (
+  SELECT 1 FROM items i WHERE i.item_id = (l->>'item_id')::int
+);
+
+-- a reverse link must point at a reversible relation
+SELECT p.name FROM process_recipes p JOIN item_relations r ON r.name = p.relation_name
+WHERE p.relation_direction = 'reverse' AND NOT r.reversible;
+```
+
 ## Running the DB locally (nix dev shell)
 
 Local dev runs a real Postgres from the nix shell — no container. `default.nix`
