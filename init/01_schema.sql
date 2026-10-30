@@ -19,7 +19,7 @@ CREATE TABLE items (
   value     integer,
   lowalch   integer,
   highalch  integer,
-  buy_limit integer,               -- /mapping "limit"
+  buy_limit integer,               -- /mapping "limit"; NULL = the Wiki doesn't know it, never 0
   icon      text
 );
 CREATE INDEX items_name_lower_idx ON items (lower(name));  -- name -> id search

@@ -71,7 +71,7 @@ type Item struct {
 	Value    int    `json:"value"`
 	LowAlch  int    `json:"lowalch"`
 	HighAlch int    `json:"highalch"`
-	Limit    int    `json:"limit"`
+	Limit    *int   `json:"limit"` // nil: the Wiki doesn't know it, which is not a limit of 0
 	Icon     string `json:"icon"`
 }
 
