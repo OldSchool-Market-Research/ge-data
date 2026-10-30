@@ -11,7 +11,9 @@
 -- A recipe added later stays NULL ("unlabelled") until it is listed here.
 --
 -- Re-runnable. Prod apply (manual, on eldo, AS THE ge-data ROLE; 02+03 applied):
---   psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -f init/07_item_relation_families.sql
+--   psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -v ON_ERROR_STOP=1 -f init/07_item_relation_families.sql
+-- (without ON_ERROR_STOP, psql exits 0 on an SQL error, and ge-orchestrator refuses to
+-- boot without this column)
 
 BEGIN;
 

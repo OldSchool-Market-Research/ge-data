@@ -95,7 +95,7 @@ Apply it as the `ge-data` role before deploying a ge-mcp or orchestrator that re
 the column:
 
 ```bash
-PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data \
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -v ON_ERROR_STOP=1 \
   -f init/07_item_relation_families.sql
 ```
 
