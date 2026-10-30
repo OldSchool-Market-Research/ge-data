@@ -85,6 +85,14 @@ WHERE NOT EXISTS (
 );
 ```
 
+### Unknown buy limits (`init/08_items_unknown_buy_limit.sql`)
+
+`items.buy_limit` is NULL when the Wiki's `/mapping` has no limit for an item, which
+is about 500 of them. It means unknown, never 0: `process_quotes_now` skips a NULL leg
+when it caps a recipe by buy limits and counts it in `unknown_limit_legs`. The script
+clears the 0s the ingester used to write. Apply it after every reader of `buy_limit`
+is deployed.
+
 ### Recipe families (`init/07_item_relation_families.sql`)
 
 `item_relations.family` is a recipe's sub-type, finer than `kind`: `kind` says how
