@@ -85,6 +85,20 @@ WHERE NOT EXISTS (
 );
 ```
 
+### Recipe families (`init/07_item_relation_families.sql`)
+
+`item_relations.family` is a recipe's sub-type, finer than `kind`: `kind` says how
+a conversion works, `family` says what market it trades in. Reporting and
+calibration read it; a recipe's mechanics still come from `kind`. Curated by exact
+name, re-runnable, and a recipe added later stays NULL until it is listed there.
+Apply it as the `ge-data` role before deploying a ge-mcp or orchestrator that reads
+the column:
+
+```bash
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data \
+  -f init/07_item_relation_families.sql
+```
+
 ## process_recipes (`init/04_process_recipes.sql` + `05_process_recipes_seed.sql`)
 
 Processing money-makers: conversions that cost player time (planks, keels,

@@ -4,6 +4,9 @@
 -- armour sets, and combine recipes are the only places two GE prices are
 -- mechanically linked, so sum-of-parts gaps are direction-neutral edges.
 --
+-- `family` (a sub-type, finer than kind) is added and curated by
+-- 07_item_relation_families.sql.
+--
 -- Not ingested from anywhere at runtime: curated by hand (IDs resolved from
 -- the OSRS Wiki /mapping, the same source as `items`), seeded by
 -- 03_item_relations_seed.sql, which is re-runnable (ON CONFLICT DO UPDATE).
