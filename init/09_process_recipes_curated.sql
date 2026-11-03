@@ -10,8 +10,9 @@
 -- Kourend & Kebos diary, plus cooking gauntlets where they apply, from each Wiki
 -- page's success chart ((high + 1) / 256 at level 99, capped at 1). A Cooking cape
 -- never burns, so it raises the rows below 1 to 1.
--- Left out: pies (Summer, Wild, Admiral, Dragonfruit, Mushroom), a separate low-end
--- market; Tuna potato (its Tuna and corn input barely trades); Rainbow crab meat (no sales).
+-- Left out: pies (Summer, Wild, Admiral, Dragonfruit, Mushroom), outside this rule;
+-- Tuna potato (its Tuna and corn input barely trades); Rainbow crab meat (no insta-buys,
+-- and the raw barely trades).
 --
 -- Fortify via armour: an Armadyl piece bought and chiselled replaces bought plates,
 -- so the plates are never traded. Links to item_relations. Rates chain the sheet's
