@@ -134,6 +134,16 @@ PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data \
   -f init/04_process_recipes.sql -f init/05_process_recipes_seed.sql
 ```
 
+Recipes the sheet doesn't have live in `init/09_process_recipes_curated.sql` with
+`source` 'curated', so a re-generated 05 leaves them alone. New linked rows need
+their relation in 03 first, and their family in 07:
+
+```bash
+PGPASSWORD=... psql -h 127.0.0.1 -p 5432 -U ge-data -d ge-data -v ON_ERROR_STOP=1 \
+  -f init/03_item_relations_seed.sql -f init/07_item_relation_families.sql \
+  -f init/09_process_recipes_curated.sql
+```
+
 **Sanity check after (re)seeding.** Same rule as above: any row returned is a
 curation bug.
 
