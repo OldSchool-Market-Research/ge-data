@@ -6,10 +6,9 @@
 -- Cooking: every 1-raw, 1-cooked fish or hunter meat at 60+ Cooking the sheet doesn't
 -- have, with a market on both sides, whatever its margin today: prices move, and a
 -- row's quote shows when it pays. 1300 actions/hr matches the sheet's other cooking rows.
--- Outputs are expected yields: 99 Cooking on the Hosidius range with the elite
--- Kourend & Kebos diary, plus cooking gauntlets where they apply, from each Wiki
--- page's success chart ((high + 1) / 256 at level 99, capped at 1). A Cooking cape
--- never burns, so it raises the rows below 1 to 1.
+-- Outputs assume a Cooking cape, which never burns: the operator is 99 Cooking, the
+-- same assumption the sheet's cooking rows make. Each note says what stops burns
+-- without one, from the Wiki page's success chart ((high + 1) / 256 at level 99).
 -- Left out: pies (Summer, Wild, Admiral, Dragonfruit, Mushroom), outside this rule;
 -- Tuna potato (its Tuna and corn input barely trades); Rainbow crab meat (no insta-buys,
 -- and the raw barely trades).
@@ -27,12 +26,12 @@ BEGIN;
 
 INSERT INTO process_recipes (name, category, relation_name, relation_direction, inputs, outputs, fee_gp, actions_per_hour, throughput, source, notes) VALUES
 -- ── Cooking ──
-('Cooking Manta Ray', 'Cooking', NULL, NULL, '[{"item_id":389,"qty":1}]', '[{"item_id":391,"qty":0.96875}]', 0, 1300, 'fixed', 'curated', 'Requires 91 Cooking. Burns at every level without a Cooking cape; the yield is the Hosidius range at 99 with the elite diary.'),
-('Cooking Dark Crab', 'Cooking', NULL, NULL, '[{"item_id":11934,"qty":1}]', '[{"item_id":11936,"qty":0.96875}]', 0, 1300, 'fixed', 'curated', 'Requires 90 Cooking. Burns at every level without a Cooking cape; the yield is the Hosidius range at 99 with the elite diary.'),
+('Cooking Manta Ray', 'Cooking', NULL, NULL, '[{"item_id":389,"qty":1}]', '[{"item_id":391,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 91 Cooking. Burns at every level without a Cooking cape: 96.9% success at 99 on the Hosidius range with the elite diary.'),
+('Cooking Dark Crab', 'Cooking', NULL, NULL, '[{"item_id":11934,"qty":1}]', '[{"item_id":11936,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 90 Cooking. Burns at every level without a Cooking cape: 96.9% success at 99 on the Hosidius range with the elite diary.'),
 ('Cooking Bluefin', 'Cooking', NULL, NULL, '[{"item_id":32341,"qty":1}]', '[{"item_id":32344,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 87 Cooking. No burns at 99 only on the Hosidius range with the elite diary.'),
 ('Cooking Anglerfish', 'Cooking', NULL, NULL, '[{"item_id":13439,"qty":1}]', '[{"item_id":13441,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 84 Cooking. No burns at 99 only with cooking gauntlets on a range.'),
-('Cooking Dashing Kebbit', 'Cooking', NULL, NULL, '[{"item_id":29107,"qty":1}]', '[{"item_id":29134,"qty":0.9765625}]', 0, 1300, 'fixed', 'curated', 'Requires 82 Cooking and 50 Hunters'' Rumours. Burns at every level without a Cooking cape; the yield is the Hosidius range at 99 with the elite diary.'),
-('Cooking Sea Turtle', 'Cooking', NULL, NULL, '[{"item_id":395,"qty":1}]', '[{"item_id":397,"qty":0.96875}]', 0, 1300, 'fixed', 'curated', 'Requires 82 Cooking. Burns at every level without a Cooking cape; the yield is the Hosidius range at 99 with the elite diary.'),
+('Cooking Dashing Kebbit', 'Cooking', NULL, NULL, '[{"item_id":29107,"qty":1}]', '[{"item_id":29134,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 82 Cooking and 50 Hunters'' Rumours. Burns at every level without a Cooking cape: 97.7% success at 99 on the Hosidius range with the elite diary.'),
+('Cooking Sea Turtle', 'Cooking', NULL, NULL, '[{"item_id":395,"qty":1}]', '[{"item_id":397,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 82 Cooking. Burns at every level without a Cooking cape: 96.9% success at 99 on the Hosidius range with the elite diary.'),
 ('Cooking Yellowfin', 'Cooking', NULL, NULL, '[{"item_id":32325,"qty":1}]', '[{"item_id":32328,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 79 Cooking. No burns at 99 only on the Hosidius range with the elite diary.'),
 ('Cooking Haddock', 'Cooking', NULL, NULL, '[{"item_id":32317,"qty":1}]', '[{"item_id":32320,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 73 Cooking. No burns at 99 only on the Hosidius range (the easy diary is enough).'),
 ('Cooking Jumbo Squid', 'Cooking', NULL, NULL, '[{"item_id":31561,"qty":1}]', '[{"item_id":31564,"qty":1}]', 0, 1300, 'fixed', 'curated', 'Requires 71 Cooking. No burns at 99 only on the Hosidius range (the easy diary is enough).'),
