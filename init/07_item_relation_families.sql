@@ -36,7 +36,7 @@ FROM (VALUES
   ('jewellery', ARRAY['Amulet of rancour','Necklace of rupture','Uncut zenyte','Zenyte (cut)']),
   ('repair', ARRAY['Belle''s folly (repair)','Torva full helm (restore)','Torva platebody (restore)','Torva platelegs (restore)','Zombie axe (repair)','Zombie helmet (repair)']),
   ('weapon', ARRAY['Accursed sceptre (u)','Accursed sceptre (u)<->(au)','Burning claws','Dragon hunter lance','Kodai wand','Thammaron''s sceptre (u)<->(au)','Toxic staff of the dead','Twinflame staff','Uncharged toxic trident','Uncharged toxic trident (e) (from trident (e))','Uncharged toxic trident (e) (Lieve)','Uncharged trident (e) (Lieve)','Ursine chainmace (u)','Venator bow','Voidwaker','Webweaver bow (u)','Zaryte crossbow']),
-  ('armour', ARRAY['Dragon platebody','Masori body (f)','Masori chaps (f)','Masori mask (f)','Serpentine helm']),
+  ('armour', ARRAY['Dragon platebody','Masori body (f)','Masori body (f) (from Armadyl chainskirt + helmet)','Masori body (f) (from Armadyl chestplate)','Masori chaps (f)','Masori chaps (f) (from Armadyl chainskirt)','Masori mask (f)','Masori mask (f) (from Armadyl helmet)','Serpentine helm']),
   ('misc', ARRAY['Crystal key']),
   -- kind decant
   ('restore', ARRAY['Prayer potion 1<->4','Prayer potion 2<->4','Prayer potion 3<->4','Prayer regeneration potion 3<->4','Sanfew serum 3<->4','Saradomin brew 1<->4','Saradomin brew 2<->4','Saradomin brew 3<->4','Super restore 1<->4','Super restore 2<->4','Super restore 3<->4']),
